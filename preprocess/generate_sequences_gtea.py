@@ -3,12 +3,13 @@ import cv2
 import numpy as np
 from glob import glob
 from tqdm import tqdm
+import random
 
 SEQ_LEN = 6
-IMAGE_SIZE = (224, 224)  # width, height
+IMAGE_SIZE = (224, 224)
+MAX_SEQ_PER_VIDEO = 1000
 
 def read_gaze_labels(txt_path):
-    """視線ログからフレーム番号ごとの (x, y) ピクセル座標を抽出"""
     gaze_map = {}
     with open(txt_path, 'r') as f:
         lines = f.readlines()[1:]  # skip header
@@ -32,7 +33,7 @@ def process_video(video_path, label_path):
     valid_gaze = []
     W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
+
     frame_id = 0
     while True:
         ret, frame = cap.read()
@@ -48,18 +49,28 @@ def process_video(video_path, label_path):
         valid_gaze.append(gaze_norm)
     cap.release()
 
-    # 時系列切り出し
+    # ランダムな位置から最大 MAX_SEQ_PER_VIDEO 件を抽出
     sequences = []
     labels = []
-    for i in range(len(frames) - SEQ_LEN + 1):
+    total_possible = len(frames) - SEQ_LEN + 1
+    if total_possible < 1:
+        return np.array([]), np.array([])
+    
+    indices = list(range(total_possible))
+    random.shuffle(indices)
+    for i in indices[:min(total_possible, MAX_SEQ_PER_VIDEO)]:
         seq = frames[i:i+SEQ_LEN]
         label = valid_gaze[i+SEQ_LEN-1]
         sequences.append(seq)
         labels.append(label)
-    
+
     return np.array(sequences), np.array(labels)
 
-def main(input_dir, output_path):
+def main(input_dir, output_path, seed=None):
+    if seed is not None:
+        print(f"[INFO] Setting random seed: {seed}")
+        random.seed(seed)
+
     all_sequences = []
     all_labels = []
 
@@ -72,6 +83,8 @@ def main(input_dir, output_path):
             continue
         try:
             seqs, labels = process_video(video_path, label_path)
+            if len(seqs) == 0:
+                continue
             all_sequences.append(seqs)
             all_labels.append(labels)
         except Exception as e:
@@ -88,5 +101,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_dir', type=str, default="data/raw/gtea")
     parser.add_argument('--output', type=str, default="data/processed/gtea/train.npz")
+    parser.add_argument('--seed', type=int, default=42, help="Random seed (optional)")
     args = parser.parse_args()
-    main(args.input_dir, args.output)
+    main(args.input_dir, args.output, seed=args.seed)

@@ -1,2 +1,10 @@
 /venv
 roughcopybyai.py
+*.npz
+*.npy
+/data/raw/gtea/*
+!/data/raw/gtea/sample.md
+/data/preprocessed/gtea/*
+!/data/preprocessed/gtea/sample.txt
+*.pth
+
